@@ -1,18 +1,30 @@
-
-
-
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageChops
 import io, hashlib, magic, exifread, cv2, numpy as np
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_bytes
 import pytesseract
 
-# ✅ Set tesseract path if not in PATH
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
+# -----------------------------------------------------------
+# 🌐 CORS CONFIGURATION
+# -----------------------------------------------------------
 app = FastAPI(title="Document Tampering Detection API", version="4.0")
+
+# Allow ALL origins – works for local + Render + any frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change to your domain later if needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Optional: Add a home route so GET / works
+@app.get("/")
+def home():
+    return {"status": "running", "message": "Document Forensics API"}
 
 
 # -----------------------------------------------------------
@@ -45,28 +57,25 @@ def analyze_pdf_bytes(b: bytes):
         creation = meta.get("CreationDate", "")
         modified = meta.get("ModDate", "")
 
-        # --- Classification sets ---
         manual_tools = ["Word", "Photoshop", "Canva", "Figma", "PowerPoint", "LibreOffice", "WPS", "Illustrator", "Docx"]
-        # corporate_generators = ["itext", "wkhtmltopdf", "tcpdf", "jspdf", "adobe pdf library"]
+
         corporate_generators = [
-    "itext", "wkhtmltopdf", "tcpdf", "jspdf", "adobe pdf library",
-    "jasperreports", "birt", "crystal reports", "pentaho", "oracle reports"
-]
+            "itext", "wkhtmltopdf", "tcpdf", "jspdf", "adobe pdf library",
+            "jasperreports", "birt", "crystal reports", "pentaho", "oracle reports"
+        ]
+
         ai_generators = ["reportlab", "weasyprint", "pydf", "pdfkit", "chromium pdf", "playwright pdf"]
 
-        # --- Rule 1: Detect manual creation ---
         if any(tool.lower() in creator.lower() for tool in manual_tools):
             out["suspicious"].append(f"Created using {creator} → user-generated document")
             out["source_category"] = "manual"
             out["risk_level"] = "high"
 
-        # --- Rule 2: Detect AI-generated PDFs ---
         elif any(ai.lower() in creator.lower() for ai in ai_generators):
             out["suspicious"].append(f"Generated using {creator} → likely AI or automated PDF")
             out["source_category"] = "ai"
             out["risk_level"] = "medium"
 
-        # --- Rule 3: Corporate PDF Generators ---
         elif any(safe in creator.lower() for safe in corporate_generators):
             out["source_category"] = "corporate"
             out["risk_level"] = "low"
@@ -76,17 +85,14 @@ def analyze_pdf_bytes(b: bytes):
             out["risk_level"] = "medium"
             out["suspicious"].append(f"Unknown or unlisted PDF producer: {creator}")
 
-        # --- Rule 4: Modified after creation ---
         if creation and modified and creation != modified:
             out["suspicious"].append("Modified after original creation")
             out["risk_level"] = "high"
 
-        # --- Rule 5: Missing signature (except corporate) ---
         if out["source_category"] not in ["corporate"]:
             if not any("Signature" in k for k in meta.keys()):
                 out["suspicious"].append("No digital signature metadata found")
 
-        # --- Rule 6: No embedded fonts (for AI/manual/unknown) ---
         if out["source_category"] in ["ai", "manual", "unknown"]:
             if "/Font" not in str(reader.trailer):
                 out["suspicious"].append("No embedded fonts → possibly scanned or AI-generated image PDF")
@@ -193,7 +199,7 @@ def extract_text_from_image_bytes(b: bytes) -> str:
 
 
 # -----------------------------------------------------------
-# 🧮 Scoring + Risk Mapping
+# 🧮 Scoring
 # -----------------------------------------------------------
 def aggregate(parts):
     reasons = []
@@ -214,7 +220,6 @@ def aggregate(parts):
             if p.get("suspicious"):
                 score += len(p.get("suspicious")) * 10
 
-        # Risk aggregation
         if p.get("risk_level") == "high":
             overall_risk = "high"
         elif p.get("risk_level") == "medium" and overall_risk != "high":
@@ -222,7 +227,6 @@ def aggregate(parts):
 
     score = round(min(score, 100), 2)
 
-    # Derive risk from score
     if score >= 70:
         overall_risk = "high"
     elif score >= 40:
@@ -263,6 +267,271 @@ async def check_document(file: UploadFile = File(...)):
         "parts": parts,
         "aggregate": aggregate(parts),
     }
+
+
+
+# from fastapi import FastAPI, File, UploadFile
+# from fastapi.responses import JSONResponse
+# from PIL import Image, ImageChops
+# import io, hashlib, magic, exifread, cv2, numpy as np
+# from PyPDF2 import PdfReader
+# from pdf2image import convert_from_bytes
+# import pytesseract
+
+# # ✅ Set tesseract path if not in PATH
+# # pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+# app = FastAPI(title="Document Tampering Detection API", version="4.0")
+
+
+# # -----------------------------------------------------------
+# # 🧠 Utility Helpers
+# # -----------------------------------------------------------
+# def sha256_of_bytes(b: bytes) -> str:
+#     h = hashlib.sha256()
+#     h.update(b)
+#     return h.hexdigest()
+
+
+# def mime_type_of_bytes(b: bytes) -> str:
+#     try:
+#         return magic.from_buffer(b, mime=True)
+#     except Exception:
+#         return "application/octet-stream"
+
+
+# # -----------------------------------------------------------
+# # 📄 PDF Forensics
+# # -----------------------------------------------------------
+# def analyze_pdf_bytes(b: bytes):
+#     out = {"type": "pdf", "metadata": {}, "suspicious": [], "source_category": "", "risk_level": "low"}
+#     try:
+#         reader = PdfReader(io.BytesIO(b))
+#         meta = {k[1:]: v for k, v in (reader.metadata or {}).items()}
+#         out["metadata"] = meta
+
+#         creator = meta.get("Creator", "") or meta.get("Producer", "")
+#         creation = meta.get("CreationDate", "")
+#         modified = meta.get("ModDate", "")
+
+#         # --- Classification sets ---
+#         manual_tools = ["Word", "Photoshop", "Canva", "Figma", "PowerPoint", "LibreOffice", "WPS", "Illustrator", "Docx"]
+#         # corporate_generators = ["itext", "wkhtmltopdf", "tcpdf", "jspdf", "adobe pdf library"]
+#         corporate_generators = [
+#     "itext", "wkhtmltopdf", "tcpdf", "jspdf", "adobe pdf library",
+#     "jasperreports", "birt", "crystal reports", "pentaho", "oracle reports"
+# ]
+#         ai_generators = ["reportlab", "weasyprint", "pydf", "pdfkit", "chromium pdf", "playwright pdf"]
+
+#         # --- Rule 1: Detect manual creation ---
+#         if any(tool.lower() in creator.lower() for tool in manual_tools):
+#             out["suspicious"].append(f"Created using {creator} → user-generated document")
+#             out["source_category"] = "manual"
+#             out["risk_level"] = "high"
+
+#         # --- Rule 2: Detect AI-generated PDFs ---
+#         elif any(ai.lower() in creator.lower() for ai in ai_generators):
+#             out["suspicious"].append(f"Generated using {creator} → likely AI or automated PDF")
+#             out["source_category"] = "ai"
+#             out["risk_level"] = "medium"
+
+#         # --- Rule 3: Corporate PDF Generators ---
+#         elif any(safe in creator.lower() for safe in corporate_generators):
+#             out["source_category"] = "corporate"
+#             out["risk_level"] = "low"
+
+#         else:
+#             out["source_category"] = "unknown"
+#             out["risk_level"] = "medium"
+#             out["suspicious"].append(f"Unknown or unlisted PDF producer: {creator}")
+
+#         # --- Rule 4: Modified after creation ---
+#         if creation and modified and creation != modified:
+#             out["suspicious"].append("Modified after original creation")
+#             out["risk_level"] = "high"
+
+#         # --- Rule 5: Missing signature (except corporate) ---
+#         if out["source_category"] not in ["corporate"]:
+#             if not any("Signature" in k for k in meta.keys()):
+#                 out["suspicious"].append("No digital signature metadata found")
+
+#         # --- Rule 6: No embedded fonts (for AI/manual/unknown) ---
+#         if out["source_category"] in ["ai", "manual", "unknown"]:
+#             if "/Font" not in str(reader.trailer):
+#                 out["suspicious"].append("No embedded fonts → possibly scanned or AI-generated image PDF")
+
+#     except Exception as e:
+#         out["error"] = str(e)
+#         out["source_category"] = "error"
+#         out["risk_level"] = "high"
+
+#     return out
+
+
+# def extract_text_from_pdf_bytes(b: bytes) -> str:
+#     try:
+#         pages = convert_from_bytes(b)
+#         text = [pytesseract.image_to_string(p) for p in pages]
+#         return "\n".join(text)
+#     except Exception:
+#         return ""
+
+
+# # -----------------------------------------------------------
+# # 🖼️ Image Forensics
+# # -----------------------------------------------------------
+# def extract_exif_from_bytes(b: bytes):
+#     try:
+#         return {k: str(v) for k, v in exifread.process_file(io.BytesIO(b), details=False).items()}
+#     except:
+#         return {}
+
+
+# def ela_score(pil_img):
+#     buf = io.BytesIO()
+#     pil_img.save(buf, "JPEG", quality=90)
+#     buf.seek(0)
+#     recompressed = Image.open(buf)
+#     ela = ImageChops.difference(pil_img, recompressed)
+#     ela = Image.eval(ela, lambda x: min(255, x * 12))
+#     return float(np.asarray(ela).mean())
+
+
+# def copy_move_score(pil_img):
+#     img = np.array(pil_img.convert("RGB"))
+#     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+#     orb = cv2.ORB_create(1500)
+#     kp, des = orb.detectAndCompute(gray, None)
+#     if des is None:
+#         return 0.0
+#     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+#     matches = bf.knnMatch(des, des, k=2)
+#     good = []
+#     for m, n in matches:
+#         if m.distance < 0.75 * n.distance and m.queryIdx != m.trainIdx:
+#             p1, p2 = kp[m.queryIdx].pt, kp[m.trainIdx].pt
+#             if np.linalg.norm(np.array(p1) - np.array(p2)) > 20:
+#                 good.append(m)
+#     return min(1.0, len(good) / 100)
+
+
+# def image_forensics_from_bytes(b: bytes):
+#     pil_img = Image.open(io.BytesIO(b)).convert("RGB")
+#     gray = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2GRAY)
+#     ela = ela_score(pil_img)
+#     cm = copy_move_score(pil_img)
+#     blur = cv2.Laplacian(gray, cv2.CV_64F).var()
+#     exif = extract_exif_from_bytes(b)
+
+#     susp = []
+#     if not exif:
+#         susp.append("Missing EXIF")
+#     if ela > 20:
+#         susp.append("High ELA → edited")
+#     if cm > 0.5:
+#         susp.append("Copy-move pattern found")
+#     if blur < 15:
+#         susp.append("Unnaturally low sharpness")
+
+#     risk = "low"
+#     if ela > 40 or cm > 0.6:
+#         risk = "high"
+#     elif ela > 20 or cm > 0.3:
+#         risk = "medium"
+
+#     return {
+#         "type": "image",
+#         "ela_score": ela,
+#         "copy_move_score": cm,
+#         "blur": blur,
+#         "exif": exif,
+#         "suspicious": susp,
+#         "source_category": "image",
+#         "risk_level": risk,
+#     }
+
+
+# # -----------------------------------------------------------
+# # 🔠 OCR Helpers
+# # -----------------------------------------------------------
+# def extract_text_from_image_bytes(b: bytes) -> str:
+#     try:
+#         return pytesseract.image_to_string(Image.open(io.BytesIO(b)))
+#     except:
+#         return ""
+
+
+# # -----------------------------------------------------------
+# # 🧮 Scoring + Risk Mapping
+# # -----------------------------------------------------------
+# def aggregate(parts):
+#     reasons = []
+#     score = 0.0
+#     overall_risk = "low"
+#     category = "unknown"
+
+#     for p in parts:
+#         reasons.extend(p.get("suspicious", []))
+#         category = p.get("source_category", category)
+
+#         if p.get("type") == "pdf":
+#             score += len(p.get("suspicious", [])) * 15
+
+#         if p.get("type") == "image":
+#             score += p.get("ela_score", 0) / 5
+#             score += p.get("copy_move_score", 0) * 40
+#             if p.get("suspicious"):
+#                 score += len(p.get("suspicious")) * 10
+
+#         # Risk aggregation
+#         if p.get("risk_level") == "high":
+#             overall_risk = "high"
+#         elif p.get("risk_level") == "medium" and overall_risk != "high":
+#             overall_risk = "medium"
+
+#     score = round(min(score, 100), 2)
+
+#     # Derive risk from score
+#     if score >= 70:
+#         overall_risk = "high"
+#     elif score >= 40:
+#         overall_risk = "medium"
+
+#     return {
+#         "tamper_score": score,
+#         "source_category": category,
+#         "risk_level": overall_risk,
+#         "reasons": reasons,
+#     }
+
+
+# # -----------------------------------------------------------
+# # 🚀 API Endpoint
+# # -----------------------------------------------------------
+# @app.post("/check-document")
+# async def check_document(file: UploadFile = File(...)):
+#     content = await file.read()
+#     fname = file.filename
+#     mime = mime_type_of_bytes(content)
+#     sha = sha256_of_bytes(content)
+#     parts = []
+
+#     if "pdf" in mime or fname.lower().endswith(".pdf"):
+#         pdf = analyze_pdf_bytes(content)
+#         pdf["ocr_snippet"] = extract_text_from_pdf_bytes(content)[:300]
+#         parts.append(pdf)
+#     elif mime.startswith("image/"):
+#         img = image_forensics_from_bytes(content)
+#         img["ocr_snippet"] = extract_text_from_image_bytes(content)[:300]
+#         parts.append(img)
+#     else:
+#         return JSONResponse({"error": f"Unsupported type {mime}"})
+
+#     return {
+#         "file_info": {"filename": fname, "mime": mime, "sha256": sha},
+#         "parts": parts,
+#         "aggregate": aggregate(parts),
+#     }
 
 
 # from fastapi import FastAPI, File, UploadFile
