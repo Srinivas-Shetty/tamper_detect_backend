@@ -2,6 +2,7 @@ FROM debian:bookworm-slim
 
 ENV PYTHONUNBUFFERED=1
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-dev \
     tesseract-ocr poppler-utils \
@@ -12,10 +13,8 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# 👇 Force rebuild layer
-ARG REBUILD=1
-
-RUN pip3 install --no-cache-dir -r requirements.txt
+# FIX: allow pip installation in Debian managed environment
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY . .
 
