@@ -5,13 +5,8 @@ opencv-python
 pytesseract
 pdf2image
 PyPDF2
-python-magic-bin
-exifread
 python-multipart
+python-magic
+exifread
 numpy
 pyhanko
-sentence-transformers
-torch
-scikit-learn
-transformers
-huggingface-hub
