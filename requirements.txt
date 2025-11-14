@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pillow
+opencv-python
+pytesseract
+pdf2image
+PyPDF2
+python-magic-bin
+exifread
+python-multipart
+numpy
+pyhanko
+sentence-transformers
+torch
+scikit-learn
+transformers
+huggingface-hub

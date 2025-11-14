@@ -1,0 +1,90 @@
+# ----------------------------
+# Python cache / temp files
+# ----------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.pkl
+*.pickle
+
+# ----------------------------
+# Virtual environment folders
+# ----------------------------
+env/
+venv/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# ----------------------------
+# System / IDE files
+# ----------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ----------------------------
+# Build & distribution folders
+# ----------------------------
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ----------------------------
+# Logs
+# ----------------------------
+*.log
+logs/
+log/
+
+# ----------------------------
+# Jupyter backups
+# ----------------------------
+.ipynb_checkpoints/
+
+# ----------------------------
+# Models / large data
+# (if not needed in repo)
+# ----------------------------
+*.pt
+*.pth
+*.bin
+*.onnx
+*.h5
+
+# ----------------------------
+# FastAPI static/cache files
+# ----------------------------
+static/
+uploads/
+temp/
+tmp/
+
+# ----------------------------
+# PDF/Image uploads (optional)
+# ----------------------------
+*.pdf
+*.jpg
+*.jpeg
+*.png
+
+# ----------------------------
+# Local configs (should not push)
+# ----------------------------
+*.env
+.env.*
+secrets.json
+config.json
+
+# ----------------------------
+# OS/cache
+# ----------------------------
+*.bak
+*.old
+*.orig
