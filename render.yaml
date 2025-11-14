@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: document-forensics-api
+    name: document_tamper_api
     env: docker
     plan: free
     branch: main
