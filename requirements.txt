@@ -9,4 +9,3 @@ python-multipart
 python-magic
 exifread
 numpy
-pyhanko
